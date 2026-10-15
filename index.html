@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#05010a" />
+  <title>绯红星云 · 粒子星球</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      color: #fff;
+      background:
+        radial-gradient(1100px 720px at 50% 42%, rgba(118, 24, 82, 0.30), transparent 62%),
+        radial-gradient(760px 540px at 16% 18%, rgba(54, 30, 138, 0.26), transparent 58%),
+        radial-gradient(820px 560px at 84% 76%, rgba(255, 74, 24, 0.11), transparent 60%),
+        radial-gradient(1400px 900px at 50% 50%, rgba(28, 5, 44, 0.55), transparent 72%),
+        #020006;
+      background-attachment: fixed;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #scene {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+      touch-action: none;
+    }
+
+    #scene.is-dragging {
+      cursor: grabbing;
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      background: radial-gradient(ellipse at center,
+          rgba(0, 0, 0, 0) 42%,
+          rgba(0, 0, 0, 0.52) 100%);
+    }
+
+    #hud {
+      position: fixed;
+      left: 50%;
+      bottom: 26px;
+      z-index: 4;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+
+    .hud-panel {
+      display: flex;
+      align-items: center;
+      gap: clamp(14px, 3vw, 34px);
+      padding: 11px 24px;
+      border: 1px solid rgba(255, 132, 174, 0.28);
+      border-radius: 16px;
+      background: linear-gradient(180deg,
+          rgba(32, 9, 46, 0.42),
+          rgba(6, 2, 16, 0.56));
+      box-shadow:
+        0 12px 44px rgba(0, 0, 0, 0.55),
+        0 0 26px rgba(255, 64, 120, 0.16),
+        inset 0 0 18px rgba(255, 90, 150, 0.06);
+      backdrop-filter: blur(13px) saturate(150%);
+      -webkit-backdrop-filter: blur(13px) saturate(150%);
+      white-space: nowrap;
+    }
+
+    .hud-item {
+      font-size: 14px;
+      letter-spacing: 0.04em;
+      color: #fff;
+      text-shadow:
+        0 0 8px rgba(255, 255, 255, 0.45),
+        0 0 22px rgba(255, 92, 168, 0.38);
+    }
+
+    .hud-label {
+      font-weight: 400;
+      opacity: 0.72;
+    }
+
+    .hud-value {
+      font-weight: 600;
+      letter-spacing: 0.07em;
+    }
+
+    .hud-divider {
+      width: 1px;
+      height: 15px;
+      background: linear-gradient(180deg,
+          transparent,
+          rgba(255, 255, 255, 0.55),
+          transparent);
+      opacity: 0.7;
+    }
+
+    .hud-hint {
+      font-size: 11px;
+      letter-spacing: 0.22em;
+      color: rgba(255, 255, 255, 0.58);
+      text-shadow: 0 0 8px rgba(160, 90, 255, 0.35);
+    }
+
+    #load-error {
+      position: fixed;
+      inset: 0;
+      z-index: 9;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      color: rgba(255, 255, 255, 0.85);
+      text-align: center;
+      background: rgba(3, 1, 8, 0.72);
+    }
+
+    #load-error.show {
+      display: flex;
+    }
+
+    @media (max-width: 760px) {
+      .hud-panel {
+        gap: 10px;
+        padding: 9px 14px;
+        border-radius: 14px;
+      }
+
+      .hud-item {
+        font-size: 12px;
+      }
+
+      .hud-divider {
+        display: none;
+      }
+
+      .hud-hint {
+        font-size: 10px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      #hud {
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        transform: none;
+      }
+
+      .hud-panel {
+        width: 100%;
+        flex-wrap: wrap;
+        justify-content: center;
+        row-gap: 6px;
+        padding: 9px 10px;
+        border-radius: 12px;
+        white-space: normal;
+      }
+
+      .hud-item {
+        font-size: 11px;
+      }
+
+      .hud-hint {
+        display: none;
+      }
+    }
+
+    @media (max-height: 520px) {
+      #hud {
+        bottom: 10px;
+      }
+
+      .hud-panel {
+        padding: 7px 12px;
+      }
+
+      .hud-hint {
+        display: none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="scene" aria-label="由粒子构成的红色星球三维场景"></canvas>
+
+  <div id="hud" aria-live="polite">
+    <div class="hud-panel">
+      <span class="hud-item">
+        <span class="hud-label">粒子数量：</span><span class="hud-value" id="particle-count">12800</span>
+      </span>
+      <span class="hud-divider" aria-hidden="true"></span>
+      <span class="hud-item">
+        <span class="hud-label">当前视角：</span><span class="hud-value" id="view-angle">45°</span>
+      </span>
+      <span class="hud-divider" aria-hidden="true"></span>
+      <span class="hud-item">
+        <span class="hud-label">缩放级别：</span><span class="hud-value" id="zoom-level">1.0x</span>
+      </span>
+    </div>
+    <div class="hud-hint">拖拽旋转镜头 · 滚轮缩放 · 星球自转中</div>
+  </div>
+
+  <div id="load-error">
+    <p>无法加载 Three.js CDN，请检查网络连接后刷新页面。</p>
+  </div>
+
+  <noscript>
+    <div style="position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;color:#fff;background:#020006;">
+      请启用 JavaScript 以查看粒子星球。
+    </div>
+  </noscript>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var errorBox = document.getElementById('load-error');
+      if (!window.THREE) {
+        errorBox.classList.add('show');
+        return;
+      }
+
+      var canvas = document.getElementById('scene');
+      var renderer = new THREE.WebGLRenderer({
+        canvas: canvas,
+        antialias: true,
+        alpha: true,
+        powerPreference: 'high-performance'
+      });
+
+      var pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+      renderer.setPixelRatio(pixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setClearColor(0x000000, 0);
+
+      var scene = new THREE.Scene();
+      var camera = new THREE.PerspectiveCamera(
+        50,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        220
+      );
+
+      var PLANET_RADIUS = 1.7;
+      var PARTICLE_COUNT = 12800;
+      var INITIAL_RADIUS = 5.8;
+      var MIN_RADIUS = 3.1;
+      var MAX_RADIUS = 8.8;
+      var REDUCED_MOTION = window.matchMedia &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      var orbit = {
+        theta: Math.PI * 0.25,
+        phi: 1.08,
+        radius: INITIAL_RADIUS,
+        targetTheta: Math.PI * 0.25,
+        targetPhi: 1.08,
+        targetRadius: INITIAL_RADIUS
+      };
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function updateCamera() {
+        var sinPhi = Math.sin(orbit.phi);
+        camera.position.set(
+          orbit.radius * sinPhi * Math.sin(orbit.theta),
+          orbit.radius * Math.cos(orbit.phi),
+          orbit.radius * sinPhi * Math.cos(orbit.theta)
+        );
+        camera.lookAt(0, 0, 0);
+      }
+      updateCamera();
+
+      function makeAdditive(material) {
+        material.blending = THREE.CustomBlending;
+        material.blendSrc = THREE.SrcAlphaFactor;
+        material.blendDst = THREE.OneFactor;
+        material.blendEquation = THREE.AddEquation;
+        material.blendSrcAlpha = THREE.ZeroFactor;
+        material.blendDstAlpha = THREE.OneFactor;
+        material.blendEquationAlpha = THREE.AddEquation;
+        return material;
+      }
+
+      function createStarTexture() {
+        var size = 64;
+        var half = size / 2;
+        var c = document.createElement('canvas');
+        c.width = c.height = size;
+        var ctx = c.getContext('2d');
+        var grad = ctx.createRadialGradient(half, half, 0, half, half, half);
+        grad.addColorStop(0.0, 'rgba(255,255,255,1)');
+        grad.addColorStop(0.16, 'rgba(255,255,255,0.85)');
+        grad.addColorStop(0.45, 'rgba(255,255,255,0.16)');
+        grad.addColorStop(1.0, 'rgba(255,255,255,0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, size, size);
+        var tex = new THREE.CanvasTexture(c);
+        tex.needsUpdate = true;
+        return tex;
+      }
+
+      function createRingTexture(rgb, ringPosition, softness, peakAlpha) {
+        var size = 256;
+        var half = size / 2;
+        var c = document.createElement('canvas');
+        c.width = c.height = size;
+        var ctx = c.getContext('2d');
+        var grad = ctx.createRadialGradient(half, half, 0, half, half, half);
+        var color = function (alpha) {
+          return 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + alpha + ')';
+        };
+        var inner = Math.max(0, ringPosition - softness);
+        var outer = Math.min(1, ringPosition + softness * 0.55);
+        grad.addColorStop(0, color(0));
+        grad.addColorStop(inner, color(0));
+        grad.addColorStop(ringPosition, color(peakAlpha));
+        grad.addColorStop(outer, color(0));
+        grad.addColorStop(1, color(0));
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, size, size);
+        var tex = new THREE.CanvasTexture(c);
+        tex.needsUpdate = true;
+        return tex;
+      }
+
+      function createStars(count, radiusMin, radiusMax, size, opacity) {
+        var positions = new Float32Array(count * 3);
+        var colors = new Float32Array(count * 3);
+        var color = new THREE.Color();
+
+        for (var i = 0; i < count; i++) {
+          var r = radiusMin + Math.random() * (radiusMax - radiusMin);
+          var theta = Math.random() * Math.PI * 2;
+          var cosPhi = Math.random() * 2 - 1;
+          var sinPhi = Math.sqrt(Math.max(0, 1 - cosPhi * cosPhi));
+
+          positions[i * 3] = r * sinPhi * Math.cos(theta);
+          positions[i * 3 + 1] = r * cosPhi;
+          positions[i * 3 + 2] = r * sinPhi * Math.sin(theta);
+
+          var roll = Math.random();
+          if (roll < 0.62) {
+            color.setHSL(
+              0.58 + Math.random() * 0.14,
+              0.25 + Math.random() * 0.22,
+              0.72 + Math.random() * 0.26
+            );
+          } else if (roll < 0.86) {
+            color.setHSL(
+              0.05 + Math.random() * 0.07,
+              0.50 + Math.random() * 0.32,
+              0.62 + Math.random() * 0.30
+            );
+          } else {
+            color.setHSL(
+              0.78 + Math.random() * 0.09,
+              0.45 + Math.random() * 0.28,
+              0.66 + Math.random() * 0.30
+            );
+          }
+
+          colors[i * 3] = color.r;
+          colors[i * 3 + 1] = color.g;
+          colors[i * 3 + 2] = color.b;
+        }
+
+        var geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        var material = new THREE.PointsMaterial({
+          size: size,
+          map: starTexture,
+          vertexColors: true,
+          transparent: true,
+          opacity: opacity,
+          depthWrite: false,
+          sizeAttenuation: true
+        });
+        makeAdditive(material);
+
+        var points = new THREE.Points(geometry, material);
+        points.frustumCulled = false;
+        return points;
+      }
+
+      var starTexture = createStarTexture();
+      var starsA = createStars(950, 36, 82, 0.11, 0.78);
+      var starsB = createStars(320, 42, 96, 0.22, 0.55);
+      starsA.renderOrder = 0;
+      starsB.renderOrder = 0;
+      scene.add(starsA);
+      scene.add(starsB);
+
+      function hash3(x, y, z) {
+        var n = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453123;
+        return n - Math.floor(n);
+      }
+
+      function smoothstep(t) {
+        return t * t * (3 - 2 * t);
+      }
+
+      function noise3(x, y, z) {
+        var ix = Math.floor(x);
+        var iy = Math.floor(y);
+        var iz = Math.floor(z);
+        var fx = smoothstep(x - ix);
+        var fy = smoothstep(y - iy);
+        var fz = smoothstep(z - iz);
+
+        var n000 = hash3(ix, iy, iz);
+        var n100 = hash3(ix + 1, iy, iz);
+        var n010 = hash3(ix, iy + 1, iz);
+        var n110 = hash3(ix + 1, iy + 1, iz);
+        var n001 = hash3(ix, iy, iz + 1);
+        var n101 = hash3(ix + 1, iy, iz + 1);
+        var n011 = hash3(ix, iy + 1, iz + 1);
+        var n111 = hash3(ix + 1, iy + 1, iz + 1);
+
+        var nx00 = n000 + (n100 - n000) * fx;
+        var nx10 = n010 + (n110 - n010) * fx;
+        var nx01 = n001 + (n101 - n001) * fx;
+        var nx11 = n011 + (n111 - n011) * fx;
+
+        var nxy0 = nx00 + (nx10 - nx00) * fy;
+        var nxy1 = nx01 + (nx11 - nx01) * fy;
+
+        return nxy0 + (nxy1 - nxy0) * fz;
+      }
+
+      function fbm(x, y, z) {
+        var value = 0;
+        var amplitude = 0.5;
+        var total = 0;
+        var frequency = 1;
+
+        for (var o = 0; o < 3; o++) {
+          value += amplitude * (noise3(x * frequency, y * frequency, z * frequency) * 2 - 1);
+          total += amplitude;
+          amplitude *= 0.5;
+          frequency *= 2.02;
+        }
+        return value / total;
+      }
+
+      var paletteStops = [
+        new THREE.Color('#ff1f3c'),
+        new THREE.Color('#ff4a00'),
+        new THREE.Color('#ff8a1a'),
+        new THREE.Color('#ff3d8c'),
+        new THREE.Color('#9d4bff')
+      ];
+
+      function samplePalette(t) {
+        t = clamp(t, 0, 0.999999);
+        var scaled = t * (paletteStops.length - 1);
+        var index = Math.floor(scaled);
+        var frac = scaled - index;
+        return paletteStops[index].clone().lerp(paletteStops[index + 1], frac);
+      }
+
+      var planetPositions = new Float32Array(PARTICLE_COUNT * 3);
+      var planetNormals = new Float32Array(PARTICLE_COUNT * 3);
+      var planetColors = new Float32Array(PARTICLE_COUNT * 3);
+      var aSizes = new Float32Array(PARTICLE_COUNT);
+      var aStretches = new Float32Array(PARTICLE_COUNT);
+      var aPhases = new Float32Array(PARTICLE_COUNT);
+      var aSpeeds = new Float32Array(PARTICLE_COUNT);
+      var aAmps = new Float32Array(PARTICLE_COUNT);
+
+      var scratchNormal = new THREE.Vector3();
+      var scratchColor = new THREE.Color();
+
+      for (var pi = 0; pi < PARTICLE_COUNT; pi++) {
+        var u = Math.random() * Math.PI * 2;
+        var v = Math.acos(Math.random() * 2 - 1);
+        var sinV = Math.sin(v);
+
+        scratchNormal.set(
+          sinV * Math.cos(u),
+          Math.cos(v),
+          sinV * Math.sin(u)
+        );
+
+        var lat = scratchNormal.y;
+        var warp = fbm(
+          scratchNormal.x * 2.35,
+          scratchNormal.y * 2.35,
+          scratchNormal.z * 2.35
+        );
+        var band = Math.sin(lat * Math.PI * 5.5 + warp * 4.0) * 0.01;
+        var radial = 0.958 +
+          Math.pow(Math.random(), 2.2) * 0.075 +
+          warp * 0.035 +
+          band;
+
+        var radius = PLANET_RADIUS * radial;
+        planetPositions[pi * 3] = scratchNormal.x * radius;
+        planetPositions[pi * 3 + 1] = scratchNormal.y * radius;
+        planetPositions[pi * 3 + 2] = scratchNormal.z * radius;
+
+        planetNormals[pi * 3] = scratchNormal.x;
+        planetNormals[pi * 3 + 1] = scratchNormal.y;
+        planetNormals[pi * 3 + 2] = scratchNormal.z;
+
+        var tint = 0.5 + 0.5 * Math.sin(lat * 3.3 + warp * 2.8 + u * 0.25);
+        scratchColor.copy(samplePalette(tint));
+        scratchColor.multiplyScalar(0.82 + Math.random() * 0.34);
+        planetColors[pi * 3] = scratchColor.r;
+        planetColors[pi * 3 + 1] = scratchColor.g;
+        planetColors[pi * 3 + 2] = scratchColor.b;
+
+        aSizes[pi] = 0.5 + Math.pow(Math.random(), 1.55) * 1.6;
+        aStretches[pi] = 0.55 + Math.pow(Math.random(), 1.2) * 1.35;
+        aPhases[pi] = Math.random() * Math.PI * 2;
+        aSpeeds[pi] = 0.55 + Math.random() * 1.05;
+        aAmps[pi] = 0.005 + Math.pow(Math.random(), 2.1) * 0.02;
+      }
+
+      var planetGeometry = new THREE.BufferGeometry();
+      planetGeometry.setAttribute('position', new THREE.BufferAttribute(planetPositions, 3));
+      planetGeometry.setAttribute('normal', new THREE.BufferAttribute(planetNormals, 3));
+      planetGeometry.setAttribute('color', new THREE.BufferAttribute(planetColors, 3));
+      planetGeometry.setAttribute('aSize', new THREE.BufferAttribute(aSizes, 1));
+      planetGeometry.setAttribute('aStretch', new THREE.BufferAttribute(aStretches, 1));
+      planetGeometry.setAttribute('aPhase', new THREE.BufferAttribute(aPhases, 1));
+      planetGeometry.setAttribute('aSpeed', new THREE.BufferAttribute(aSpeeds, 1));
+      planetGeometry.setAttribute('aAmp', new THREE.BufferAttribute(aAmps, 1));
+
+      var planetUniforms = {
+        uTime: { value: 0 },
+        uPixelRatio: { value: pixelRatio },
+        uPointScale: { value: 28.0 }
+      };
+
+      var planetVertexShader = [
+        'uniform float uTime;',
+        'uniform float uPixelRatio;',
+        'uniform float uPointScale;',
+        'attribute float aSize;',
+        'attribute float aStretch;',
+        'attribute float aPhase;',
+        'attribute float aSpeed;',
+        'attribute float aAmp;',
+        'varying vec3 vColor;',
+        'varying float vRim;',
+        'varying float vTrailAngle;',
+        'varying float vStretch;',
+        'varying float vTwinkle;',
+        '',
+        'void main() {',
+        '  vec3 baseNormal = normalize(position);',
+        '  vec3 axis = vec3(0.0, 1.0, 0.0);',
+        '',
+        '  vec3 objTangent = cross(axis, baseNormal);',
+        '  float objTangentLen = length(objTangent);',
+        '  objTangent = objTangentLen > 0.0001 ? objTangent / objTangentLen : vec3(1.0, 0.0, 0.0);',
+        '',
+        '  float w1 = sin(uTime * aSpeed + aPhase);',
+        '  float w2 = sin(uTime * aSpeed * 0.73 + aPhase * 1.71);',
+        '  vec3 displaced = position',
+        '      + baseNormal * (w1 * aAmp)',
+        '      + objTangent * (w2 * aAmp * 0.6);',
+        '',
+        '  vec4 mvPosition = modelViewMatrix * vec4(displaced, 1.0);',
+        '  vec3 viewNormal = normalize(normalMatrix * baseNormal);',
+        '  vec3 viewDir = normalize(-mvPosition.xyz);',
+        '  float rim = 1.0 - abs(dot(viewNormal, viewDir));',
+        '  vRim = pow(max(rim, 0.0), 2.2);',
+        '',
+        '  vec3 worldPos = (modelMatrix * vec4(displaced, 1.0)).xyz;',
+        '  vec3 worldTangent = cross(axis, worldPos);',
+        '  float worldTangentLen = length(worldTangent);',
+        '  worldTangent = worldTangentLen > 0.0001 ? worldTangent / worldTangentLen : vec3(1.0, 0.0, 0.0);',
+        '  vec3 viewTangent = normalize((viewMatrix * vec4(worldTangent, 0.0)).xyz);',
+        '',
+        '  vec4 p1 = projectionMatrix * mvPosition;',
+        '  vec4 p2 = projectionMatrix * (mvPosition + vec4(viewTangent * 0.15, 0.0));',
+        '  vec2 sp1 = p1.xy / max(p1.w, 0.0001);',
+        '  vec2 sp2 = p2.xy / max(p2.w, 0.0001);',
+        '  vec2 screenDir = sp2 - sp1;',
+        '  vTrailAngle = length(screenDir) > 0.00001 ? atan(screenDir.y, screenDir.x) : 0.0;',
+        '',
+        '  vColor = color;',
+        '  vStretch = aStretch;',
+        '  vTwinkle = 0.68 + 0.32 * sin(uTime * (0.55 + aSpeed * 0.35) + aPhase * 2.3);',
+        '',
+        '  float dist = length(mvPosition.xyz);',
+        '  gl_PointSize = aSize * uPointScale * uPixelRatio / max(dist, 0.8);',
+        '  gl_PointSize = clamp(gl_PointSize, 0.8, 20.0);',
+        '  gl_Position = p1;',
+        '}'
+      ].join('\n');
+
+      var planetFragmentShader = [
+        'varying vec3 vColor;',
+        'varying float vRim;',
+        'varying float vTrailAngle;',
+        'varying float vStretch;',
+        'varying float vTwinkle;',
+        '',
+        'void main() {',
+        '  vec2 p = gl_PointCoord - 0.5;',
+        '  float ca = cos(vTrailAngle);',
+        '  float sa = sin(vTrailAngle);',
+        '  vec2 q = vec2(ca * p.x - sa * p.y, sa * p.x + ca * p.y);',
+        '',
+        '  float rimStretch = mix(0.25, 1.0, clamp(vRim * 1.6, 0.0, 1.0));',
+        '  float stretch = 1.0 + vStretch * rimStretch;',
+        '  float d = length(vec2(q.x / stretch, q.y));',
+        '',
+        '  float core = exp(-d * d * 14.0);',
+        '  float glow = exp(-d * 4.8);',
+        '  float alpha = core * 1.05 + glow * 0.20;',
+        '  alpha *= vTwinkle;',
+        '  alpha *= 0.86 + vRim * 0.70;',
+        '  alpha = clamp(alpha, 0.0, 1.0);',
+        '',
+        '  vec3 rimColor = mix(',
+        '      vec3(1.0, 0.40, 0.20),',
+        '      vec3(0.70, 0.30, 1.0),',
+        '      clamp(vRim * 1.45, 0.0, 1.0)',
+        '  );',
+        '  vec3 col = mix(vColor, rimColor, clamp(vRim * 0.95, 0.0, 1.0));',
+        '  col *= 0.90 + vRim * 0.50;',
+        '  col += rimColor * vRim * 0.22;',
+        '',
+        '  gl_FragColor = vec4(col, alpha);',
+        '}'
+      ].join('\n');
+
+      var planetMaterial = new THREE.ShaderMaterial({
+        uniforms: planetUniforms,
+        vertexShader: planetVertexShader,
+        fragmentShader: planetFragmentShader,
+        transparent: true,
+        depthWrite: true,
+        depthTest: true
+      });
+      makeAdditive(planetMaterial);
+
+      var planetPoints = new THREE.Points(planetGeometry, planetMaterial);
+      planetPoints.frustumCulled = false;
+      planetPoints.renderOrder = 5;
+
+      var coreGeometry = new THREE.SphereGeometry(PLANET_RADIUS * 0.905, 64, 48);
+      var coreMaterial = new THREE.MeshBasicMaterial({
+        color: 0x0b020a,
+        transparent: false,
+        depthWrite: true
+      });
+      var coreSphere = new THREE.Mesh(coreGeometry, coreMaterial);
+      coreSphere.renderOrder = -10;
+
+      scene.add(coreSphere);
+      scene.add(planetPoints);
+
+      function addGlowSprite(rgb, ringPosition, softness, peakAlpha, scale, opacity) {
+        var texture = createRingTexture(rgb, ringPosition, softness, peakAlpha);
+        var material = new THREE.SpriteMaterial({
+          map: texture,
+          color: 0xffffff,
+          transparent: true,
+          opacity: opacity,
+          depthTest: false,
+          depthWrite: false
+        });
+        makeAdditive(material);
+
+        var sprite = new THREE.Sprite(material);
+        sprite.scale.set(scale, scale, 1);
+        sprite.renderOrder = 1;
+        scene.add(sprite);
+        return sprite;
+      }
+
+      var edgeGlow = addGlowSprite([255, 96, 44], 0.70, 0.24, 0.70, 4.6, 0.52);
+      var outerGlow = addGlowSprite([150, 70, 255], 0.46, 0.30, 0.45, 8.4, 0.45);
+      var dreamHalo = addGlowSprite([255, 45, 90], 0.56, 0.35, 0.20, 11.0, 0.32);
+
+      var activePointer = null;
+      var lastX = 0;
+      var lastY = 0;
+
+      canvas.addEventListener('pointerdown', function (event) {
+        if (activePointer !== null) return;
+        activePointer = event.pointerId;
+        lastX = event.clientX;
+        lastY = event.clientY;
+        canvas.classList.add('is-dragging');
+        try {
+          canvas.setPointerCapture(event.pointerId);
+        } catch (err) { }
+      });
+
+      canvas.addEventListener('pointermove', function (event) {
+        if (event.pointerId !== activePointer) return;
+        var dx = event.clientX - lastX;
+        var dy = event.clientY - lastY;
+        lastX = event.clientX;
+        lastY = event.clientY;
+
+        orbit.targetTheta -= dx * 0.0055;
+        orbit.targetPhi = clamp(
+          orbit.targetPhi - dy * 0.0042,
+          0.18,
+          Math.PI - 0.18
+        );
+      });
+
+      function releasePointer(event) {
+        if (event.pointerId !== activePointer) return;
+        activePointer = null;
+        canvas.classList.remove('is-dragging');
+      }
+      canvas.addEventListener('pointerup', releasePointer);
+      canvas.addEventListener('pointercancel', releasePointer);
+
+      window.addEventListener('wheel', function (event) {
+        event.preventDefault();
+        var zoomFactor = Math.exp(event.deltaY * 0.0012);
+        orbit.targetRadius = clamp(
+          orbit.targetRadius * zoomFactor,
+          MIN_RADIUS,
+          MAX_RADIUS
+        );
+      }, { passive: false });
+
+      window.addEventListener('resize', function () {
+        pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+        renderer.setPixelRatio(pixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        planetUniforms.uPixelRatio.value = pixelRatio;
+      });
+
+      var countEl = document.getElementById('particle-count');
+      var angleEl = document.getElementById('view-angle');
+      var zoomEl = document.getElementById('zoom-level');
+      var lastHudUpdate = -1;
+
+      countEl.textContent = String(PARTICLE_COUNT);
+
+      function updateHud(elapsed) {
+        if (elapsed - lastHudUpdate < 0.12) return;
+        lastHudUpdate = elapsed;
+
+        var degrees = orbit.theta * 180 / Math.PI;
+        degrees = ((degrees % 360) + 360) % 360;
+        angleEl.textContent = Math.round(degrees) + '°';
+
+        var zoom = INITIAL_RADIUS / orbit.radius;
+        zoomEl.textContent = zoom.toFixed(1) + 'x';
+      }
+
+      var clock = new THREE.Clock();
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        var dt = Math.min(clock.getDelta(), 0.05);
+        var elapsed = clock.getElapsedTime();
+        var damp = 1 - Math.exp(-dt * (REDUCED_MOTION ? 4.2 : 7.0));
+
+        orbit.theta += (orbit.targetTheta - orbit.theta) * damp;
+        orbit.phi += (orbit.targetPhi - orbit.phi) * damp;
+        orbit.radius += (orbit.targetRadius - orbit.radius) * damp;
+        updateCamera();
+
+        planetPoints.rotation.y += dt * (REDUCED_MOTION ? 0.012 : 0.05);
+        planetUniforms.uTime.value = elapsed;
+
+        starsA.rotation.y -= dt * 0.0025;
+        starsB.rotation.y += dt * 0.0018;
+        starsA.material.opacity = 0.72 + 0.14 * Math.sin(elapsed * 0.8);
+        starsB.material.opacity = 0.50 + 0.16 * Math.sin(elapsed * 1.13 + 2.0);
+
+        edgeGlow.material.opacity = 0.48 + 0.10 * Math.sin(elapsed * 0.9 + 1.3);
+        outerGlow.material.opacity = 0.40 + 0.10 * Math.sin(elapsed * 0.7);
+        dreamHalo.material.opacity = 0.28 + 0.08 * Math.sin(elapsed * 0.55 + 0.8);
+
+        renderer.render(scene, camera);
+        updateHud(elapsed);
+      }
+
+      animate();
+    })();
+  </script>
+</body>
+</html>
